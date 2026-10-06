@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./dictionaries (1).ipynb)",
+      "Read(./download)",
+      "Read(./**/.ipynb_checkpoints/**)"
+    ]
+  }
+}
