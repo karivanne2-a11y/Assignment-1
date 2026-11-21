@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>São Paulo Night Run</title>
+<style>
+  :root {
+    --bg: #07060d; --fg: #f4f1ff; --muted: #a49cc4; --accent: #ffcc00; --accent2: #00e0a4;
+    --panel: rgba(12, 10, 24, 0.78); --border: rgba(255, 255, 255, 0.14); --danger: #ff3b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+  canvas { display: block; }
+  .hud { position: fixed; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between;
+    pointer-events: none; gap: 12px; flex-wrap: wrap; }
+  .chip { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px;
+    backdrop-filter: blur(6px); font-variant-numeric: tabular-nums; }
+  .chip b { color: var(--accent); font-size: 20px; }
+  .chip small { display: block; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; }
+  #gpu { position: fixed; right: 16px; bottom: 16px; width: min(340px, calc(100vw - 32px)); font-size: 12px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; }
+  #gpu h3 { margin: 0 0 6px; font-size: 12px; color: var(--accent2); letter-spacing: .1em; }
+  #gpu .row { display: flex; justify-content: space-between; gap: 8px; }
+  #gpu .row span:last-child { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 210px; }
+  #gpu canvas { width: 100%; height: 40px; margin: 6px 0; border-radius: 4px; background: rgba(0,0,0,.35); }
+  #gpu .btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  button, select { font: inherit; color: var(--fg); background: rgba(255,255,255,.08); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+  button:hover { background: rgba(255,255,255,.16); }
+  button.primary { background: var(--accent); color: #1a1300; border-color: var(--accent); font-weight: 700; }
+  #gpu.collapsed .body { display: none; }
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(20,8,40,.55), rgba(0,0,0,.85));
+    padding: 16px; z-index: 5; }
+  .overlay.hidden { display: none; }
+  .card { max-width: 520px; width: 100%; text-align: center; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px 24px; }
+  .card h1 { margin: 0; font-size: clamp(28px, 7vw, 48px); letter-spacing: .02em; line-height: 1.05; }
+  .card h1 span { color: var(--accent); }
+  .card p { color: var(--muted); line-height: 1.5; }
+  .card .keys { font-size: 13px; color: var(--fg); opacity: .85; }
+  .card .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .card .actions button { padding: 10px 18px; font-size: 15px; }
+  #toast { position: fixed; top: 90px; left: 50%; transform: translateX(-50%); font-weight: 800; font-size: 22px;
+    color: var(--accent2); text-shadow: 0 0 12px rgba(0,224,164,.7); opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #touch { position: fixed; bottom: 16px; left: 16px; display: none; gap: 10px; }
+  #touch button { width: 64px; height: 64px; font-size: 26px; border-radius: 50%; }
+  @media (pointer: coarse) { #touch { display: flex; } #gpu { bottom: 96px; } }
+  #benchResult { white-space: pre; text-align: left; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    background: rgba(0,0,0,.35); padding: 10px; border-radius: 8px; color: var(--fg); overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="hud">
+  <div class="stats">
+    <div class="chip"><small>Pontos</small><b id="score">0</b></div>
+    <div class="chip"><small>Entregas</small><b id="deliv">0</b></div>
+    <div class="chip"><small>Velocidade</small><b id="speed">0</b> km/h</div>
+    <div class="chip"><small>Tempo</small><b id="time">90</b> s</div>
+  </div>
+  <div class="chip" id="district"><small>Bairro</small><b>Avenida Paulista</b></div>
+</div>
+<div id="toast"></div>
+
+<div id="gpu" class="chip">
+  <h3>GPU HARNESS <button id="gpuToggle" style="float:right;padding:0 6px">–</button></h3>
+  <div class="body">
+    <div class="row"><span>GPU</span><span id="gRenderer">—</span></div>
+    <div class="row"><span>API</span><span id="gApi">—</span></div>
+    <div class="row"><span>FPS / frame</span><span id="gFps">—</span></div>
+    <div class="row"><span>Draw calls</span><span id="gCalls">—</span></div>
+    <div class="row"><span>Triangles</span><span id="gTris">—</span></div>
+    <div class="row"><span>Render res</span><span id="gRes">—</span></div>
+    <canvas id="gGraph" width="320" height="40"></canvas>
+    <div class="row"><span>Qualidade</span>
+      <select id="quality">
+        <option value="low">Low</option><option value="medium">Medium</option>
+        <option value="high" selected>High</option><option value="ultra">Ultra</option>
+      </select>
+    </div>
+    <div class="btns">
+      <button id="benchBtn" class="primary">Run benchmark (20 s)</button>
+      <button id="dlBtn" disabled>Download JSON</button>
+    </div>
+  </div>
+</div>
+
+<div id="touch"><button id="tLeft">◀</button><button id="tRight">▶</button></div>
+
+<div class="overlay" id="menu">
+  <div class="card">
+    <h1>São Paulo<br><span>Night Run</span></h1>
+    <p>Chuva, neon e trânsito. Ride a delivery motorbike through rainy São Paulo at night. Collect the glowing orders, dodge traffic, and beat the clock.</p>
+    <p class="keys">← → / A D: steer &nbsp;·&nbsp; ↑ / W: accelerate &nbsp;·&nbsp; ↓ / S: brake &nbsp;·&nbsp; Space: boost</p>
+    <div id="benchResult" hidden></div>
+    <div class="actions">
+      <button class="primary" id="playBtn">Jogar</button>
+      <button id="menuBench">GPU benchmark</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ---------- Quality presets ----------
+const PRESETS = {
+  low:    { pixelRatio: 0.6, bloom: false, rain: 1500,  shadows: false, buildings: 70,  fog: 0.018 },
+  medium: { pixelRatio: 0.85, bloom: true, rain: 4000,  shadows: false, buildings: 110, fog: 0.014 },
+  high:   { pixelRatio: 1.0, bloom: true,  rain: 9000,  shadows: true,  buildings: 160, fog: 0.011 },
+  ultra:  { pixelRatio: 1.5, bloom: true,  rain: 20000, shadows: true,  buildings: 240, fog: 0.008 },
+};
+const params = new URLSearchParams(location.search);
+let quality = params.get('q') in PRESETS ? params.get('q') : 'high';
+document.getElementById('quality').value = quality;
+
+// ---------- Renderer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0718);
+scene.fog = new THREE.FogExp2(0x1a0f2e, 0.011);
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 600);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.5, 0.75);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ---------- Lights ----------
+scene.add(new THREE.HemisphereLight(0x6a5acd, 0x120a1e, 0.55));
+const moon = new THREE.DirectionalLight(0xb0c4ff, 0.6);
+moon.position.set(-30, 60, 20);
+moon.shadow.mapSize.set(2048, 2048);
+Object.assign(moon.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 150 });
+scene.add(moon, moon.target);
+
+// ---------- Procedural textures ----------
+function windowTexture(seed) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 128, 256);
+  const warm = ['#ffd27a', '#ffe9b0', '#9fd8ff', '#fff4d6', '#ffb36b'];
+  let s = seed * 9301 + 49297;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  for (let y = 4; y < 256; y += 12) for (let x = 4; x < 128; x += 10) {
+    if (rnd() < 0.38) { g.fillStyle = warm[(rnd() * warm.length) | 0]; g.globalAlpha = 0.5 + rnd() * 0.5; g.fillRect(x, y, 6, 7); }
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function signTexture(text, color) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 128);
+  g.font = 'bold 76px "Segoe UI", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.shadowColor = color; g.shadowBlur = 24; g.fillStyle = color; g.fillText(text, 256, 68);
+  g.strokeStyle = color; g.lineWidth = 6; g.strokeRect(10, 10, 492, 108);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function roadTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#1b1a22'; g.fillRect(0, 0, 256, 512);
+  for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`; g.fillRect(Math.random() * 256, Math.random() * 512, 2, 2); }
+  g.fillStyle = '#e8e2c8';
+  for (const x of [85, 170]) for (let y = 0; y < 512; y += 128) g.fillRect(x - 2, y, 4, 64);
+  g.fillStyle = '#ffcc00'; g.fillRect(4, 0, 5, 512); g.fillRect(247, 0, 5, 512);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 40);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+// Portuguese-style "pedra portuguesa" sidewalk wave pattern (generic black/white wave mosaic)
+function sidewalkTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d9d4c7'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#26232b';
+  for (let y = -64; y < 320; y += 64) {
+    g.beginPath(); g.moveTo(0, y);
+    for (let x = 0; x <= 256; x += 8) g.lineTo(x, y + Math.sin(x / 256 * Math.PI * 2) * 18);
+    for (let x = 256; x >= 0; x -= 8) g.lineTo(x, y + 26 + Math.sin(x / 256 * Math.PI * 2) * 18);
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 120);
+  t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+// ---------- World ----------
+const ROAD_W = 12, LANES = [-4, 0, 4], SEG = 400;
+const road = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W, SEG),
+  new THREE.MeshStandardMaterial({ map: roadTexture(), roughness: 0.25, metalness: 0.4 }));
+road.rotation.x = -Math.PI / 2; road.receiveShadow = true; scene.add(road);
+const swTex = sidewalkTexture();
+for (const side of [-1, 1]) {
+  const sw = new THREE.Mesh(new THREE.BoxGeometry(6, 0.3, SEG), new THREE.MeshStandardMaterial({ map: swTex, roughness: 0.6 }));
+  sw.position.set(side * (ROAD_W / 2 + 3), 0.15, 0); sw.receiveShadow = true; sw.userData.tex = swTex; scene.add(sw);
+}
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, SEG), new THREE.MeshStandardMaterial({ color: 0x0d0b14, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; scene.add(ground);
+
+// Buildings (pooled & recycled)
+const winTex = [0, 1, 2, 3, 4, 5].map(windowTexture);
+const bodyColors = [0x2a2733, 0x3a3440, 0x24303a, 0x403a33, 0x2f2f2f, 0x3b2f3f];
+const buildingMats = winTex.map((t, i) => new THREE.MeshStandardMaterial({
+  color: bodyColors[i], roughness: 0.8, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 1.6 }));
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const buildings = [];
+const signWords = [['PADARIA', '#ff4fd8'], ['FARMÁCIA', '#00ff9c'], ['LANCHONETE', '#ffcc00'], ['BAR DO ZÉ', '#ff5a36'],
+  ['PASTEL', '#4fc3ff'], ['AÇAÍ', '#c56bff'], ['HOTEL', '#ff2e63'], ['CHURRASCO', '#ff8a00'], ['SAMPA', '#00e0ff']];
+const signMats = signWords.map(([w, c]) => new THREE.MeshBasicMaterial({ map: signTexture(w, c), toneMapped: false }));
+const signGeo = new THREE.PlaneGeometry(6, 1.5);
+
+function placeBuilding(b, z) {
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const w = 6 + Math.random() * 10, d = 6 + Math.random() * 10;
+  const tall = Math.random() < 0.18;
+  const h = tall ? 45 + Math.random() * 70 : 10 + Math.random() * 35;
+  b.scale.set(w, h, d);
+  b.position.set(side * (ROAD_W / 2 + 6 + w / 2 + Math.random() * 14), h / 2, z);
+  const m = b.material; m.emissiveMap.repeat.set(Math.max(1, w / 6), Math.max(1, h / 12));
+  b.userData.sign.visible = Math.random() < 0.45;
+  b.userData.sign.position.set(-side * 0.505, 6 / h - 0.5, 0);
+  b.userData.sign.rotation.y = -side * Math.PI / 2;
+  b.userData.sign.scale.set(Math.min(d * 0.8, 6) / (6 * d), 1 / h, 1);
+}
+function buildCity(n) {
+  for (const b of buildings) scene.remove(b);
+  buildings.length = 0;
+  for (let i = 0; i < n; i++) {
+    const mat = buildingMats[i % buildingMats.length].clone();
+    mat.emissiveMap = winTex[i % winTex.length].clone(); mat.emissiveMap.needsUpdate = true;
+    const b = new THREE.Mesh(boxGeo, mat); b.castShadow = b.receiveShadow = true;
+    const sign = new THREE.Mesh(signGeo, signMats[i % signMats.length]);
+    b.add(sign); b.userData.sign = sign;
+    placeBuilding(b, -i * (SEG / n) * 1.2 + 40);
+    scene.add(b); buildings.push(b);
+  }
+}
+
+// Landmark: red elevated museum block on four red pillars (stylized, recurring)
+function makeLandmark() {
+  const g = new THREE.Group();
+  const red = new THREE.MeshStandardMaterial({ color: 0xd0102a, emissive: 0x500010, roughness: 0.4 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x223344, emissive: 0x4488ff, emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.8 });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(26, 7, 12), glass); box.position.y = 12; g.add(box);
+  for (const y of [8.6, 15.4]) { const beam = new THREE.Mesh(new THREE.BoxGeometry(28, 1.2, 1.4), red); beam.position.set(0, y, 6.6); g.add(beam);
+    const b2 = beam.clone(); b2.position.z = -6.6; g.add(b2); }
+  for (const x of [-14, 14]) for (const z of [-6.6, 6.6]) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(1.4, 16, 1.4), red); p.position.set(x, 8, z); g.add(p);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+  g.rotation.y = Math.PI / 2; g.position.set(-28, 0, -150); scene.add(g); return g;
+}
+const landmark = makeLandmark();
+
+// Street lamps (instanced) + a few real point lights that follow the player
+const LAMP_N = 60, LAMP_GAP = 14;
+const poleGeo = new THREE.CylinderGeometry(0.08, 0.1, 7, 6);
+const lampsPole = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ color: 0x333333 }), LAMP_N);
+const lampsBulb = new THREE.InstancedMesh(new THREE.SphereGeometry(0.35, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb35a, toneMapped: false }), LAMP_N);
+scene.add(lampsPole, lampsBulb);
+const lampOffset = { z: 0 };
+function updateLamps(pz) {
+  const base = Math.floor(pz / LAMP_GAP) * LAMP_GAP;
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < LAMP_N; i++) {
+    const side = i % 2 ? 1 : -1, z = base - Math.floor(i / 2) * LAMP_GAP * 2 + (side > 0 ? LAMP_GAP : 0) + 20;
+    m.makeTranslation(side * (ROAD_W / 2 + 0.8), 3.5, z); lampsPole.setMatrixAt(i, m);
+    m.makeTranslation(side * (ROAD_W / 2 + 0.2), 7, z); lampsBulb.setMatrixAt(i, m);
+  }
+  lampsPole.instanceMatrix.needsUpdate = lampsBulb.instanceMatrix.needsUpdate = true;
+}
+const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffa04a, 40, 22, 1.6); scene.add(l); return l; });
+
+// Rain (GPU-animated in vertex shader)
+let rain;
+function buildRain(count) {
+  if (rain) { scene.remove(rain); rain.geometry.dispose(); }
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) { pos[i * 3] = (Math.random() - 0.5) * 80; pos[i * 3 + 1] = Math.random() * 40; pos[i * 3 + 2] = (Math.random() - 0.5) * 120; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { uTime: { value: 0 }, uOrigin: { value: new THREE.Vector3() } },
+    vertexShader: `uniform float uTime; uniform vec3 uOrigin;
+      void main(){ vec3 p = position; p.y = mod(p.y - uTime*28.0, 40.0);
+        p.z = mod(p.z - uOrigin.z + 60.0, 120.0) - 60.0 + uOrigin.z; p.x += uOrigin.x;
+        vec4 mv = modelViewMatrix * vec4(p,1.0); gl_PointSize = 60.0 / -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `void main(){ vec2 c = gl_PointCoord - .5; float a = smoothstep(.08,.0,abs(c.x)) * (1.0-abs(c.y)*2.0);
+      gl_FragColor = vec4(.7,.8,1.,a*.55); }`,
+  });
+  rain = new THREE.Points(geo, mat); rain.frustumCulled = false; scene.add(rain);
+}
+
+// ---------- Player motorbike ----------
+function makeBike() {
+  const g = new THREE.Group();
+  const body = new THREE.MeshStandardMaterial({ color: 0xe31b23, roughness: 0.3, metalness: 0.6 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 1.8), body); frame.position.y = 0.75; g.add(frame);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.5 }));
+  box.position.set(0, 1.4, 0.65); g.add(box);   // delivery box
+  for (const z of [-0.8, 0.8]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.12, 8, 18), dark); w.rotation.y = Math.PI / 2; w.position.set(0, 0.42, z); g.add(w); }
+  const rider = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.6, 4, 8), new THREE.MeshStandardMaterial({ color: 0x1f3d7a }));
+  rider.position.set(0, 1.45, 0); g.add(rider);
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), new THREE.MeshStandardMaterial({ color: 0x00a859, metalness: 0.5, roughness: 0.2 }));
+  helmet.position.set(0, 2.05, -0.05); g.add(helmet);
+  const head = new THREE.SpotLight(0xfff2d0, 120, 60, 0.45, 0.5, 1.2); head.position.set(0, 1.1, -0.9);
+  head.target.position.set(0, 0, -20); g.add(head, head.target);
+  const lamp = new THREE.Mesh(new THREE.CircleGeometry(0.14, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
+  lamp.position.set(0, 1.0, -0.92); lamp.rotation.y = Math.PI; g.add(lamp);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.05), new THREE.MeshBasicMaterial({ color: 0xff0020, toneMapped: false }));
+  tail.position.set(0, 0.95, 0.92); g.add(tail);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(g); return g;
+}
+const bike = makeBike();
+
+// ---------- Traffic ----------
+const carColors = [0xf2f2f2, 0x1d1d1d, 0x9a9a9a, 0xc0392b, 0x2c3e50, 0xf1c40f]; // yellow = taxi
+const CAR_GEO = new THREE.BoxGeometry(2.0, 1.3, 4.2), CAB_GEO = new THREE.BoxGeometry(1.8, 0.7, 2.2);
+const lightMat = new THREE.MeshBasicMaterial({ color: 0xff1030, toneMapped: false });
+const headMat = new THREE.MeshBasicMaterial({ color: 0xfff6d8, toneMapped: false });
+function makeCar(isBus) {
+  const g = new THREE.Group();
+  const col = isBus ? 0x1e88e5 : carColors[(Math.random() * carColors.length) | 0];
+  const mat = new THREE.MeshStandardMaterial({ color: col, metalness: 0.7, roughness: 0.25 });
+  const body = new THREE.Mesh(CAR_GEO, mat); body.position.y = 0.85; g.add(body);
+  if (isBus) { body.scale.set(1.25, 2.3, 2.6); body.position.y = 1.7;
+    const win = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.7, 10.5), new THREE.MeshBasicMaterial({ color: 0xbfe6ff, toneMapped: false }));
+    win.position.y = 2.6; g.add(win); }
+  else { const cab = new THREE.Mesh(CAB_GEO, new THREE.MeshStandardMaterial({ color: 0x0a0d14, metalness: 0.9, roughness: 0.1 })); cab.position.set(0, 1.8, 0.2); g.add(cab); }
+  const L = isBus ? 5.5 : 2.12;
+  for (const x of [-0.7, 0.7]) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.05), lightMat); t.position.set(x, 1.0, L); g.add(t);
+    const h = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.05), headMat); h.position.set(x, 0.9, -L); g.add(h);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.len = isBus ? 11 : 4.2; g.userData.speed = 0; scene.add(g); return g;
+}
+const cars = [];
+for (let i = 0; i < 14; i++) cars.push(makeCar(i % 6 === 0));
+function resetCar(c, z) {
+  c.position.set(LANES[(Math.random() * 3) | 0] + (Math.random() - 0.5) * 0.6, 0, z);
+  c.userData.speed = 10 + Math.random() * 14;
+}
+
+// Delivery pickups
+const pickupGeo = new THREE.OctahedronGeometry(0.7);
+const pickupMat = new THREE.MeshBasicMaterial({ color: 0x00ffb0, toneMapped: false });
+const pickups = [];
+for (let i = 0; i < 6; i++) { const p = new THREE.Mesh(pickupGeo, pickupMat); scene.add(p); pickups.push(p); }
+const ringGeo = new THREE.TorusGeometry(1.1, 0.06, 6, 32);
+for (const p of pickups) { const r = new THREE.Mesh(ringGeo, pickupMat); r.rotation.x = Math.PI / 2; r.position.y = -1.0; p.add(r); }
+function resetPickup(p, z) { p.position.set(LANES[(Math.random() * 3) | 0], 1.6, z); p.visible = true; }
+
+// ---------- Game state ----------
+const districts = ['Avenida Paulista', 'Consolação', 'Centro', 'Liberdade', 'Bela Vista', 'Pinheiros', 'Vila Madalena', 'Ibirapuera'];
+const S = { running: false, bench: false, x: 0, z: 0, speed: 0, score: 0, deliv: 0, time: 90, boost: 0, crashT: 0, autoX: 0 };
+const keys = {};
+addEventListener('keydown', e => { keys[e.code] = true; if (['ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) e.preventDefault(); });
+addEventListener('keyup', e => { keys[e.code] = false; });
+for (const [id, code] of [['tLeft', 'ArrowLeft'], ['tRight', 'ArrowRight']]) {
+  const el = document.getElementById(id);
+  el.addEventListener('pointerdown', () => keys[code] = true);
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) el.addEventListener(ev, () => keys[code] = false);
+}
+
+function resetGame() {
+  Object.assign(S, { x: 0, z: 0, speed: 20, score: 0, deliv: 0, time: 90, boost: 0, crashT: 0 });
+  cars.forEach((c, i) => resetCar(c, -40 - i * 28));
+  pickups.forEach((p, i) => resetPickup(p, -30 - i * 45));
+  buildings.forEach((b, i) => placeBuilding(b, -i * (SEG / buildings.length) * 1.2 + 40));
+}
+
+let toastT = 0;
+function toast(msg, color = 'var(--accent2)') { const t = document.getElementById('toast'); t.textContent = msg; t.style.color = color; t.style.opacity = 1; toastT = 1.2; }
+
+function applyQuality(q) {
+  quality = q; const p = PRESETS[q];
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * p.pixelRatio);
+  composer.setPixelRatio(renderer.getPixelRatio());
+  renderer.shadowMap.enabled = p.shadows; moon.castShadow = p.shadows;
+  scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
+  bloom.enabled = p.bloom; scene.fog.density = p.fog;
+  buildRain(p.rain); buildCity(p.buildings);
+  if (S.running) buildings.forEach((b, i) => placeBuilding(b, S.z - i * (SEG / buildings.length) * 1.2 + 40));
+}
+document.getElementById('quality').addEventListener('change', e => applyQuality(e.target.value));
+
+// ---------- Update ----------
+function update(dt, t) {
+  // input (or autopilot in benchmark)
+  let steer = 0, accel = 0;
+  if (S.bench) {
+    // autopilot: weave between lanes, avoid nearest car ahead
+    const ahead = cars.filter(c => c.position.z < S.z && c.position.z > S.z - 30).sort((a, b) => b.position.z - a.position.z)[0];
+    let target = LANES[Math.floor(t / 3) % 3];
+    if (ahead && Math.abs(ahead.position.x - target) < 2.5) target = LANES.find(l => Math.abs(l - ahead.position.x) > 3) ?? 0;
+    steer = THREE.MathUtils.clamp((target - S.x) * 0.8, -1, 1); accel = 1;
+  } else {
+    steer = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
+    accel = (keys.ArrowUp || keys.KeyW ? 1 : 0) - (keys.ArrowDown || keys.KeyS ? 1 : 0);
+    if (keys.Space && S.boost <= 0 && S.deliv > 0 && S.speed > 20) { S.boost = 2.0; toast('TURBO!', 'var(--accent)'); }
+  }
+  const maxSpeed = S.boost > 0 ? 55 : 38;
+  S.boost -= dt;
+  if (S.crashT > 0) { S.crashT -= dt; S.speed *= 0.95; }
+  else S.speed += (accel > 0 ? 14 : accel < 0 ? -30 : -4) * dt;
+  S.speed = THREE.MathUtils.clamp(S.speed, 8, maxSpeed);
+  S.x = THREE.MathUtils.clamp(S.x + steer * dt * (6 + S.speed * 0.15), -5.2, 5.2);
+  S.z -= S.speed * dt;
+
+  bike.position.set(S.x, 0, S.z);
+  bike.rotation.z = THREE.MathUtils.lerp(bike.rotation.z, -steer * 0.35, 0.12);
+  bike.rotation.y = THREE.MathUtils.lerp(bike.rotation.y, -steer * 0.12, 0.1);
+  if (S.crashT > 0) bike.rotation.y += Math.sin(t * 40) * 0.05;
+
+  // camera
+  const camTarget = new THREE.Vector3(S.x * 0.6, 3.6 + S.speed * 0.02, S.z + 8 + S.speed * 0.05);
+  camera.position.lerp(camTarget, 0.12);
+  camera.fov = THREE.MathUtils.lerp(camera.fov, 62 + S.speed * 0.35, 0.05); camera.updateProjectionMatrix();
+  camera.lookAt(S.x * 0.8, 1.5, S.z - 12);
+
+  // world scroll
+  road.position.z = ground.position.z = S.z - SEG / 2 + 40;
+  road.material.map.offset.y = -S.z / (SEG / 40) % 1 * -1;
+  scene.children.forEach(o => { if (o.userData.tex) { o.position.z = road.position.z; o.userData.tex.offset.y = (S.z / (SEG / 120)) % 1; } });
+  const span = (SEG / buildings.length) * 1.2 * buildings.length;
+  for (const b of buildings) if (b.position.z > S.z + 40) placeBuilding(b, b.position.z - span);
+  if (landmark.position.z > S.z + 60) landmark.position.z = S.z - 420 - Math.random() * 200;
+  updateLamps(S.z);
+  const base = Math.floor(S.z / LAMP_GAP) * LAMP_GAP;
+  lampLights.forEach((l, i) => l.position.set((i % 2 ? 1 : -1) * (ROAD_W / 2), 6.5, base - i * LAMP_GAP + (i % 2 ? LAMP_GAP : 0)));
+  moon.position.set(S.x - 30, 60, S.z + 20); moon.target.position.set(S.x, 0, S.z - 10);
+  if (rain) { rain.material.uniforms.uTime.value = t; rain.material.uniforms.uOrigin.value.set(S.x, 0, S.z - 20); }
+
+  // traffic
+  for (const c of cars) {
+    c.position.z -= c.userData.speed * dt;
+    if (c.position.z > S.z + 20) resetCar(c, S.z - 200 - Math.random() * 120);
+    const dz = Math.abs(c.position.z - S.z), dx = Math.abs(c.position.x - S.x);
+    if (S.crashT <= 0 && dx < 1.4 && dz < c.userData.len / 2 + 0.9) {
+      S.crashT = 1.0; S.speed = 8; S.time -= 5; S.score = Math.max(0, S.score - 100);
+      toast('BATIDA! −5 s', 'var(--danger)');
+      c.position.z = S.z - 40;
+    }
+  }
+  // pickups
+  for (const p of pickups) {
+    p.rotation.y += dt * 2; p.position.y = 1.6 + Math.sin(t * 3 + p.position.z) * 0.2;
+    if (p.position.z > S.z + 10) resetPickup(p, S.z - 220 - Math.random() * 100);
+    if (p.visible && Math.abs(p.position.z - S.z) < 1.2 && Math.abs(p.position.x - S.x) < 1.4) {
+      p.visible = false; S.deliv++; S.time += 4; S.score += 250 + Math.round(S.speed * 5);
+      toast('ENTREGA! +4 s');
+    }
+  }
+  S.score += Math.round(S.speed * dt * 2);
+  if (!S.bench) S.time -= dt;
+  if (S.time <= 0 && S.running && !S.bench) gameOver();
+
+  if (toastT > 0 && (toastT -= dt) <= 0) document.getElementById('toast').style.opacity = 0;
+}
+
+// ---------- HUD ----------
+const $ = id => document.getElementById(id);
+let lastDistrict = '';
+function hud() {
+  $('score').textContent = S.score; $('deliv').textContent = S.deliv;
+  $('speed').textContent = Math.round(S.speed * 3.6); $('time').textContent = Math.max(0, Math.ceil(S.time));
+  const d = districts[Math.floor(-S.z / 800) % districts.length];
+  if (d !== lastDistrict) { lastDistrict = d; $('district').innerHTML = `<small>Bairro</small><b>${d}</b>`; }
+}
+
+function gameOver() {
+  S.running = false;
+  $('menu').classList.remove('hidden');
+  $('menu').querySelector('h1').innerHTML = `Fim de jogo<br><span>${S.score} pts</span>`;
+  $('menu').querySelector('p').textContent = `${S.deliv} entregas feitas pelas ruas de São Paulo. Bora de novo?`;
+  $('playBtn').textContent = 'Jogar de novo';
+}
+
+// ---------- GPU harness ----------
+const gl = renderer.getContext();
+(function gpuInfo() {
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const r = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  const v = ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+  $('gRenderer').textContent = r; $('gRenderer').title = `${v} — ${r}`;
+  $('gApi').textContent = renderer.capabilities.isWebGL2 ? 'WebGL 2' : 'WebGL 1';
+  window.__gpu = { vendor: v, renderer: r, webgl2: renderer.capabilities.isWebGL2, maxTexture: renderer.capabilities.maxTextureSize };
+})();
+// GPU timer query (EXT_disjoint_timer_query_webgl2) when available — real GPU time, not just CPU frame time
+const tq = renderer.capabilities.isWebGL2 ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
+const pendingQ = []; let gpuMs = null;
+function gpuQueryBegin() { if (!tq) return null; const q = gl.createQuery(); gl.beginQuery(tq.TIME_ELAPSED_EXT, q); return q; }
+function gpuQueryEnd(q) { if (!q) return; gl.endQuery(tq.TIME_ELAPSED_EXT); pendingQ.push(q); }
+function gpuQueryPoll() {
+  while (pendingQ.length) {
+    const q = pendingQ[0];
+    if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+    if (!gl.getParameter(tq.GPU_DISJOINT_EXT)) gpuMs = gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
+    gl.deleteQuery(q); pendingQ.shift();
+  }
+}
+
+const graph = $('gGraph').getContext('2d'); const hist = [];
+let fpsAcc = 0, fpsN = 0, fpsShown = 0, lastInfo = { calls: 0, tris: 0 };
+function harnessUI(ms) {
+  hist.push(ms); if (hist.length > 160) hist.shift();
+  fpsAcc += ms; fpsN++;
+  if (fpsAcc > 300) {
+    fpsShown = 1000 / (fpsAcc / fpsN);
+    $('gFps').textContent = `${fpsShown.toFixed(0)} fps · ${(fpsAcc / fpsN).toFixed(1)} ms` + (gpuMs != null ? ` · GPU ${gpuMs.toFixed(1)} ms` : '');
+    $('gCalls').textContent = lastInfo.calls; $('gTris').textContent = lastInfo.tris.toLocaleString();
+    const sz = renderer.getDrawingBufferSize(new THREE.Vector2()); $('gRes').textContent = `${sz.x}×${sz.y} (${quality})`;
+    fpsAcc = fpsN = 0;
+  }
+  const W = 320, H = 40; graph.clearRect(0, 0, W, H);
+  graph.strokeStyle = 'rgba(255,255,255,.2)'; graph.beginPath(); graph.moveTo(0, H - 16.7 / 50 * H); graph.lineTo(W, H - 16.7 / 50 * H); graph.stroke();
+  graph.strokeStyle = '#00e0a4'; graph.beginPath();
+  hist.forEach((v, i) => { const y = H - Math.min(v, 50) / 50 * H; i ? graph.lineTo(i * 2, y) : graph.moveTo(0, y); }); graph.stroke();
+}
+$('gpuToggle').onclick = () => { $('gpu').classList.toggle('collapsed'); $('gpuToggle').textContent = $('gpu').classList.contains('collapsed') ? '+' : '–'; };
+
+// Benchmark: fixed 20 s autopilot run per current preset, frame-time statistics
+let bench = null, benchReport = null;
+function startBenchmark(duration = 20) {
+  resetGame(); S.running = true; S.bench = true;
+  bench = { t0: performance.now(), duration: duration * 1000, frames: [], gpu: [], calls: 0, tris: 0 };
+  $('menu').classList.add('hidden'); $('benchBtn').disabled = true; $('benchBtn').textContent = 'Benchmarking…';
+  toast('BENCHMARK', 'var(--accent)');
+}
+function finishBenchmark() {
+  const f = bench.frames.slice(10).sort((a, b) => a - b); // drop warm-up frames
+  const avg = f.reduce((a, b) => a + b, 0) / f.length;
+  const pct = p => f[Math.min(f.length - 1, Math.floor(f.length * p))];
+  const low1 = f.slice(Math.floor(f.length * 0.99)); const low1fps = 1000 / (low1.reduce((a, b) => a + b, 0) / low1.length);
+  const g = bench.gpu.length ? bench.gpu.reduce((a, b) => a + b, 0) / bench.gpu.length : null;
+  const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
+  benchReport = {
+    game: 'São Paulo Night Run', date: new Date().toISOString(), preset: quality,
+    resolution: `${sz.x}x${sz.y}`, gpu: window.__gpu, userAgent: navigator.userAgent,
+    frames: f.length, avgFps: +(1000 / avg).toFixed(1), avgFrameMs: +avg.toFixed(2),
+    p50Ms: +pct(0.5).toFixed(2), p95Ms: +pct(0.95).toFixed(2), p99Ms: +pct(0.99).toFixed(2),
+    onePercentLowFps: +low1fps.toFixed(1), avgGpuMs: g != null ? +g.toFixed(2) : 'unavailable (timer query ext missing)',
+    avgDrawCalls: Math.round(bench.calls / bench.frames.length), avgTriangles: Math.round(bench.tris / bench.frames.length),
+  };
+  const grade = benchReport.avgFps >= 120 ? 'S' : benchReport.avgFps >= 60 ? 'A' : benchReport.avgFps >= 45 ? 'B' : benchReport.avgFps >= 30 ? 'C' : 'D';
+  benchReport.grade = grade;
+  window.__bench = benchReport; console.log('BENCH', JSON.stringify(benchReport));
+  bench = null; S.bench = false; S.running = false;
+  $('benchBtn').disabled = false; $('benchBtn').textContent = 'Run benchmark (20 s)'; $('dlBtn').disabled = false;
+  $('menu').classList.remove('hidden');
+  $('menu').querySelector('h1').innerHTML = `Benchmark<br><span>Nota ${grade} · ${benchReport.avgFps} fps</span>`;
+  $('menu').querySelector('p').textContent = `Preset ${quality} at ${benchReport.resolution} on ${window.__gpu.renderer}`;
+  const r = $('benchResult'); r.hidden = false;
+  r.textContent = `avg      ${benchReport.avgFps} fps (${benchReport.avgFrameMs} ms)\n1% low   ${benchReport.onePercentLowFps} fps\np50/p95/p99  ${benchReport.p50Ms} / ${benchReport.p95Ms} / ${benchReport.p99Ms} ms\nGPU time ${benchReport.avgGpuMs}${g != null ? ' ms' : ''}\ndraws ${benchReport.avgDrawCalls} · tris ${benchReport.avgTriangles.toLocaleString()}`;
+}
+$('benchBtn').onclick = () => startBenchmark();
+$('menuBench').onclick = () => startBenchmark();
+$('dlBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(benchReport, null, 2)], { type: 'application/json' }));
+  a.download = `sp-night-run-bench-${quality}.json`; a.click();
+};
+$('playBtn').onclick = () => { resetGame(); S.running = true; S.bench = false; $('menu').classList.add('hidden'); $('benchResult').hidden = true; };
+
+// ---------- Loop ----------
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+applyQuality(quality); resetGame(); S.bench = true; // attract-mode autopilot behind the menu
+renderer.info.autoReset = false;
+const clock = new THREE.Clock(); let last = performance.now();
+function frame() {
+  const now = performance.now(), ms = now - last; last = now;
+  const dt = Math.min(clock.getDelta(), 1 / 20), t = clock.elapsedTime;
+  update(dt, t); hud();
+  renderer.info.reset();
+  const q = gpuQueryBegin(); composer.render(); gpuQueryEnd(q); if (tq) gpuQueryPoll();
+  lastInfo = { calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
+  harnessUI(ms);
+  if (bench) {
+    bench.frames.push(ms); bench.calls += lastInfo.calls; bench.tris += lastInfo.tris; if (gpuMs != null) bench.gpu.push(gpuMs);
+    if (now - bench.t0 > bench.duration) finishBenchmark();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+if (params.has('bench')) startBenchmark(+params.get('bench') || 20);
+</script>
+</body>
+</html>
