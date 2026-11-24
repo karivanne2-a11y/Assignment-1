@@ -723,8 +723,10 @@ function renderAch() {
 // ======================= Ads (portal SDK adapter with simulated fallback) =======================
 const Ads = {
   provider: 'sim', lastShopAd: -1e9,
+  get enabled() { return this.provider !== 'none'; },
   async init() {
     try {
+      if (window.__PORTAL && !window.CrazyGames?.SDK && !window.PokiSDK) { this.provider = 'none'; return; }
       if (window.CrazyGames?.SDK) { this.provider = 'crazygames'; await window.CrazyGames.SDK.init?.(); }
       else if (window.PokiSDK) { this.provider = 'poki'; await window.PokiSDK.init(); }
     } catch (e) { console.warn('Ad SDK init failed, using simulated ads', e); this.provider = 'sim'; }
@@ -745,7 +747,7 @@ const Ads = {
   },
 };
 let offer = null;
-function showOffer(text, action, sec = 8, onExpire = null) { offer = { text, action, until: clockT + sec, dur: sec, onExpire }; $('offerText').textContent = text; $('offer').classList.remove('hidden'); }
+function showOffer(text, action, sec = 8, onExpire = null) { if (!Ads.enabled) { onExpire?.(); return; } offer = { text, action, until: clockT + sec, dur: sec, onExpire }; $('offerText').textContent = text; $('offer').classList.remove('hidden'); }
 function clearOffer(expired) { const o = offer; offer = null; $('offer').classList.add('hidden'); if (expired && o?.onExpire) o.onExpire(); }
 async function acceptOffer() {
   if (!offer) return; const o = offer; offer = null; $('offer').classList.add('hidden');
@@ -987,10 +989,10 @@ function renderShop() {
   $('shopExtras').innerHTML = `
     <div class="extra"><div><b>💜 Luces de neón bajo el vehículo</b><span>Brillan con el color de tu pintura, sobre todo de noche</span></div>
       <button id="glowBtn" class="${SV.underglow ? '' : 'primary'}">${SV.underglow ? (SV.glowOn ? 'Apagar' : 'Encender') : 'Comprar ' + fmt(GLOW_PRICE)}</button></div>
-    <div class="extra"><div><b>📺 Patrocinio del día</b><span>Mira un anuncio corto y gana $50 (cada 3 minutos)</span></div>
-      <button id="adCash" class="primary" ${adReady ? '' : 'disabled'}>${adReady ? '+$50' : 'Vuelve en ' + Math.ceil(180 - (clockT - Ads.lastShopAd)) + ' s'}</button></div>`;
+    ${Ads.enabled ? '' : '<!--'}<div class="extra"><div><b>📺 Patrocinio del día</b><span>Mira un anuncio corto y gana $50 (cada 3 minutos)</span></div>
+      <button id="adCash" class="primary" ${adReady ? '' : 'disabled'}>${adReady ? '+$50' : 'Vuelve en ' + Math.ceil(180 - (clockT - Ads.lastShopAd)) + ' s'}</button></div>${Ads.enabled ? '' : '-->'}`;
   $('glowBtn').onclick = () => { if (!SV.underglow) { if (!buy(GLOW_PRICE)) return; SV.underglow = true; SV.glowOn = true; unlock('estilo'); } else SV.glowOn = !SV.glowOn; markDirty(); vehicles.forEach(applyCosmetics); renderShop(); };
-  $('adCash').onclick = async () => { const ok = await Ads.rewarded(); S.mode = 'shop'; if (ok) { Ads.lastShopAd = clockT; SV.cash += 50; markDirty(); toast('+$50 💵', '#7cff6b'); } renderShop(); };
+  if ($('adCash')) $('adCash').onclick = async () => { const ok = await Ads.rewarded(); S.mode = 'shop'; if (ok) { Ads.lastShopAd = clockT; SV.cash += 50; markDirty(); toast('+$50 💵', '#7cff6b'); } renderShop(); };
 }
 
 // ======================= Time of day =======================
