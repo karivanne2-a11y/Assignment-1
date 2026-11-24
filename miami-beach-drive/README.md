@@ -1,45 +1,61 @@
 # Miami Beach Drive
 
-Juego 3D en el navegador (WebGL 2 / Three.js, todo en la GPU) ambientado en Miami Beach: Ocean Drive, Collins Avenue, edificios Art Deco pastel con neón, palmeras, torres de salvavidas y un océano animado con shader propio.
+Juego 3D de mundo abierto en el navegador (WebGL 2 / Three.js, todo en la GPU) ambientado en Miami Beach: Ocean Drive, Collins Avenue, edificios Art Deco pastel con neón, palmeras, playa, muelle y un océano animado.
 
-## Cómo jugar
-Abre `index.html` en Chrome, Edge o Firefox (necesita internet para cargar Three.js desde jsDelivr).
+## Jugar
+Abre `index.html` en Chrome, Edge o Firefox. Es **un solo archivo autocontenido**: funciona sin internet y se puede subir tal cual a un portal de juegos.
 
-| Control | Acción |
-|---|---|
-| W A S D / flechas | Conducir (S/↓ frena y da reversa) |
-| Espacio | Freno de mano: derrapes |
-| H | Claxon (el tráfico frena) |
-| C | Cámara: persecución / cinemática / capó / aérea |
-| R | Radio (música synthwave generada en vivo) |
-| P | Foto (descarga PNG) |
-| Esc | Pausa / cambiar vehículo y color |
-| Ratón | Arrastra para girar la cámara, rueda para zoom |
-| Gamepad | Stick izq. dirección, RT gas, LT freno, A freno de mano, Y claxon |
+### Controles
+| | En vehículo | A pie |
+|---|---|---|
+| W A S D / flechas | Conducir | Caminar (relativo a la cámara) |
+| Shift | — | Correr |
+| Espacio | Freno de mano (derrape) | Saltar |
+| F / Enter | Bajarse | Subir a un vehículo, pedir prestado un auto o abrir el garaje |
+| Q / E, arrastrar ratón | Girar cámara | Girar cámara |
+| H | Claxon | — |
 
-En móvil aparecen botones táctiles.
+Otras teclas: **C** cámara (persecución, cinemática, primera persona, aérea), **R** radio, **P** foto, **G** aceptar oferta con anuncio y **Esc** pausa y logros.
 
-**Qué hacer:**
-- **Misiones de taxi:** recoge pasajeros (círculo amarillo) y llévalos a su destino (verde) antes de que se acabe el tiempo. Los saltos con pasajero dan propina.
-- **Rampas:** son rosas, están en la playa y en las calles transversales. Cuanto más tiempo en el aire, más dinero.
-- **Derrapes:** con el freno de mano a alta velocidad, que suman puntos.
-- **Estrellas de neón:** 30 repartidas por el mapa, algunas solo se alcanzan saltando.
-- **Pelotas de playa:** las puedes patear con el coche.
-- **Vehículos:** 3 con física distinta (Convertible, Scooter, Jeep, que es el rey de la arena) y 8 colores.
-- **Hora del día:** de la tarde a la noche, con la barra en ⚙️ o en ciclo automático. De noche se encienden el neón, las ventanas, las farolas y los faros.
+**Gamepad:** stick izquierdo para moverse, RT/LT para acelerar y frenar, A para derrapar o saltar, B para el claxon, X para correr, Y para subir o bajar y stick derecho para la cámara. En móvil hay botones táctiles, incluido 🚪 para subir y bajar.
+
+### Qué hacer
+- **Bajarse y explorar a pie:** caminar, correr, saltar, nadar en el mar y caminar por el muelle.
+- **Pedir prestado cualquier auto del tráfico:** el conductor se baja molesto.
+- **Misiones de taxi:** recoger pasajeros (te saludan con la mano) y llevarlos a su destino. Los saltos con pasajero dan propina.
+- **Peatones:** caminan por las aceras y la playa y se apartan de tu camino. Si atropellas a uno, se cae, se levanta enojado y pagas una multa.
+- **Garaje Brisa (G en el mapa):** comprar vehículos (Scooter, Jeep, moto acuática), pinturas y luces de neón bajo el vehículo, todo con dinero del juego.
+- **Moto acuática:** sale del muelle y permite explorar el mar, donde hay estrellas que solo se alcanzan por agua.
+- **12 logros**, rampas, derrapes, 30 estrellas, pelotas de playa que puedes patear y ciclo de día y noche.
+- **Guardado automático:** dinero, vehículos, colores y logros se guardan en el navegador.
+
+## Monetización (lista para conectar)
+`src/main.js` tiene un adaptador `Ads` con anuncios con recompensa en tres lugares:
+1. **Duplicar el pago** al terminar un viaje (8 s para aceptar con G o con el botón).
+2. **+30 s** cuando se acaba el tiempo de un viaje.
+3. **+$50 "Patrocinio del día"** en el garaje, cada 3 minutos.
+
+Sin SDK, el juego muestra un **anuncio simulado** de 3 s. Si la página carga el SDK de **CrazyGames** (`window.CrazyGames.SDK`) o de **Poki** (`window.PokiSDK`), los usa automáticamente. También llama a `gameplayStart` y `gameplayStop` al pausar, abrir el garaje o ver anuncios, y silencia el audio durante el anuncio. Para publicar en un portal, agrega la etiqueta `<script>` de su SDK en `src/index.html` y vuelve a compilar. Sigue siempre la documentación oficial del portal: esta integración **no está probada con los SDK reales**.
 
 ## GPU harness
 Panel abajo a la derecha:
-- **Info de la GPU:** nombre (se marca en verde si es NVIDIA), versión de WebGL, FPS, tiempo de frame y **tiempo real de GPU** (`EXT_disjoint_timer_query_webgl2`).
-- **Estadísticas de render:** draw calls, triángulos, resolución y gráfico de frame time.
-- **Presets Low / Medium / High / Ultra:** cambian la escala de resolución, el bloom, el tamaño del shadow map, la cantidad de palmeras y de tráfico y la resolución de la malla del océano.
-- **Benchmark de 30 s:** piloto automático por todo el circuito mientras la hora pasa de la tarde a la noche. Reporta FPS promedio, 1% low, p50/p95/p99, tiempo de GPU y una nota (S/A/B/C/D), y se puede descargar en JSON.
+- **Info de la GPU:** nombre (en verde si es NVIDIA), FPS, tiempo de frame y tiempo real de GPU (`EXT_disjoint_timer_query_webgl2`).
+- **Estadísticas de render:** draw calls, triángulos y gráfico de frame time.
+- **Presets Low / Medium / High / Ultra:** cambian la resolución, el bloom, las sombras, la cantidad de palmeras, tráfico y peatones y el detalle del océano.
+- **Benchmark de 30 s:** piloto automático con tráfico y peatones mientras pasa de la tarde a la noche. Da una nota S–D y se puede exportar a JSON.
 
-Para pruebas automáticas: `?q=ultra&bench=30`. El resultado queda en `window.__bench` y en la consola como `BENCH {...}`. También existe `?tod=0.9` para fijar la hora.
+Automatización: `?q=ultra&bench=30` deja el resultado en `window.__bench` y en la consola como `BENCH {...}`. También existe `?tod=0.9` para fijar la hora.
 
-### Correrlo en una GPU NVIDIA en la nube
-En una VM con GPU NVIDIA y escritorio remoto, abre el archivo en Chrome y verifica en `chrome://gpu` que WebGL use la GPU (no "SwiftShader"). Para correrlo en modo headless con la GPU:
-
+En una VM con GPU NVIDIA:
 ```bash
 google-chrome --headless=new --use-angle=vulkan --enable-gpu --ignore-gpu-blocklist "file:///ruta/miami-beach-drive/index.html?q=ultra&bench=30"
+```
+
+## Desarrollo
+El código fuente está en `src/` (`index.html` con HTML y CSS, `main.js` con el juego). El archivo `index.html` de la raíz se genera:
+```bash
+npm install
+```
+```bash
+npm run build
 ```

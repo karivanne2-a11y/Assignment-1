@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Miami Beach Drive</title>
+<style>
+  :root {
+    --bg: #0b0a14; --fg: #fff7fb; --muted: #c9b8d6; --pink: #ff4fa8; --cyan: #24e7ff; --mint: #7cf5c8;
+    --gold: #ffd166; --panel: rgba(18, 10, 34, 0.74); --border: rgba(255, 255, 255, 0.16); --danger: #ff4d6d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+  canvas#game { display: block; touch-action: none; }
+  .hidden { display: none !important; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; backdrop-filter: blur(8px); }
+  .hud { position: fixed; top: 12px; left: 12px; display: flex; gap: 8px; flex-wrap: wrap; max-width: calc(100vw - 280px); pointer-events: none; }
+  .chip { padding: 6px 12px; font-variant-numeric: tabular-nums; }
+  .chip small { display: block; font-size: 10px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+  .chip b { font-size: 20px; color: var(--gold); }
+  #mission { position: fixed; top: 74px; left: 12px; padding: 8px 14px; max-width: min(420px, calc(100vw - 24px)); pointer-events: none; }
+  #mission .t { font-size: 11px; color: var(--cyan); letter-spacing: .14em; text-transform: uppercase; }
+  #mission .m { font-size: 16px; font-weight: 700; }
+  #mission .s { font-size: 13px; color: var(--muted); }
+  #mapWrap { position: fixed; top: 12px; right: 12px; padding: 6px; }
+  #minimap { display: block; width: 240px; height: 100px; border-radius: 8px; }
+  #topBtns { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  button, select { font: inherit; font-size: 13px; color: var(--fg); background: rgba(255,255,255,.08); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { background: rgba(255,255,255,.18); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: linear-gradient(90deg, var(--pink), #ff8a5c); border-color: transparent; font-weight: 800; color: #fff; }
+  button.on { background: rgba(36,231,255,.25); border-color: var(--cyan); }
+  #settings { position: fixed; top: 160px; right: 12px; width: 252px; padding: 12px; font-size: 13px; }
+  #settings label { display: block; margin: 8px 0 4px; color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+  #settings input[type=range] { width: 100%; accent-color: var(--pink); }
+  .row-btns { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sw { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); cursor: pointer; padding: 0; position: relative; font-size: 11px; }
+  .sw.sel { border-color: #fff; box-shadow: 0 0 0 2px var(--pink); }
+  .sw.locked::after { content: "🔒"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; }
+  #gpu { position: fixed; right: 12px; bottom: 12px; width: min(330px, calc(100vw - 24px)); padding: 10px 12px; font: 11.5px ui-monospace, Menlo, Consolas, monospace; }
+  #gpu h3 { margin: 0 0 6px; font-size: 11.5px; color: var(--mint); letter-spacing: .12em; display: flex; justify-content: space-between; align-items: center; }
+  #gpu h3 button { padding: 0 7px; }
+  #gpu .row { display: flex; justify-content: space-between; gap: 8px; }
+  #gpu .row span:last-child { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 210px; }
+  #gpu canvas { width: 100%; height: 38px; margin: 6px 0; border-radius: 4px; background: rgba(0,0,0,.35); }
+  #gpu .btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  #gpu.collapsed .body { display: none; }
+  #toast { position: fixed; top: 34%; left: 50%; transform: translate(-50%, -50%); font-weight: 900; font-size: clamp(20px, 4vw, 36px);
+    text-shadow: 0 0 14px currentColor; opacity: 0; transition: opacity .2s; pointer-events: none; text-align: center; max-width: 92vw; }
+  #achToast { position: fixed; top: 12px; left: 50%; transform: translate(-50%, -140%); transition: transform .35s; padding: 10px 16px;
+    display: flex; gap: 10px; align-items: center; z-index: 20; pointer-events: none; }
+  #achToast.show { transform: translate(-50%, 0); }
+  #achToast .ico { font-size: 28px; } #achToast small { color: var(--gold); letter-spacing: .12em; font-size: 10px; display: block; }
+  #combo { position: fixed; bottom: 24%; left: 50%; transform: translateX(-50%); font-weight: 900; font-size: 22px; color: var(--cyan);
+    text-shadow: 0 0 10px var(--cyan); pointer-events: none; opacity: 0; transition: opacity .15s; }
+  #prompt { position: fixed; bottom: 18%; left: 50%; transform: translateX(-50%); padding: 8px 14px; font-weight: 700; pointer-events: none; white-space: nowrap; }
+  #prompt kbd, .keys kbd { font: 11px ui-monospace, monospace; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; background: rgba(255,255,255,.12); }
+  #offer { position: fixed; bottom: calc(18% + 54px); left: 50%; transform: translateX(-50%); padding: 8px 10px 8px 14px; display: flex; gap: 10px;
+    align-items: center; border-color: var(--gold); box-shadow: 0 0 20px rgba(255,209,102,.3); max-width: 92vw; }
+  #offer .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--gold); border-radius: 2px; }
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; z-index: 10;
+    background: linear-gradient(180deg, rgba(40,8,60,.35), rgba(10,4,20,.82)); overflow-y: auto; }
+  .card { width: 100%; max-width: 660px; padding: 22px; text-align: center; }
+  .card h1 { margin: 0; font-size: clamp(34px, 8vw, 60px); line-height: .95; font-style: italic;
+    background: linear-gradient(90deg, var(--pink), var(--gold), var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .card h2 { margin: 0 0 4px; font-style: italic; color: var(--pink); }
+  .card h3 { margin: 16px 0 8px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); text-align: left; }
+  .card p { color: var(--muted); line-height: 1.5; margin: 10px 0; }
+  .vehicles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 14px 0 10px; }
+  .veh { padding: 10px 8px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,.05); cursor: pointer; text-align: center; }
+  .veh.sel { border-color: var(--pink); background: rgba(255,79,168,.18); }
+  .veh.locked { opacity: .55; }
+  .veh b { display: block; font-size: 15px; } .veh span { font-size: 11px; color: var(--muted); }
+  .veh .ic { font-size: 26px; display: block; }
+  .veh button { margin-top: 8px; width: 100%; }
+  .bars { font: 10px ui-monospace, monospace; color: var(--muted); text-align: left; margin-top: 6px; line-height: 1.5; }
+  .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .actions button { padding: 10px 20px; font-size: 16px; }
+  .keys { font-size: 12px; color: var(--fg); opacity: .85; line-height: 1.8; }
+  .cashline { font-size: 22px; font-weight: 800; color: var(--gold); }
+  .extra { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; text-align: left; }
+  .extra span { font-size: 12px; color: var(--muted); display: block; }
+  .ach { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; text-align: left; }
+  .ach div { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px; opacity: .45; }
+  .ach div.got { opacity: 1; border-color: var(--gold); background: rgba(255,209,102,.1); }
+  .ach b { display: block; font-size: 13px; }
+  #benchResult { white-space: pre; text-align: left; font: 12px ui-monospace, Menlo, monospace; background: rgba(0,0,0,.35);
+    padding: 10px; border-radius: 8px; overflow-x: auto; margin-top: 10px; }
+  #adOverlay { background: rgba(0,0,0,.9); z-index: 30; }
+  #adCount { font-size: 48px; color: var(--gold); }
+  #touch { position: fixed; inset: auto 0 12px 0; display: none; justify-content: space-between; padding: 0 12px; pointer-events: none; }
+  #touch .grp { display: flex; gap: 10px; pointer-events: auto; align-items: flex-end; }
+  #touch button { width: 60px; height: 60px; border-radius: 50%; font-size: 22px; background: rgba(20,10,30,.55); }
+  @media (pointer: coarse) { #touch { display: flex; } #gpu { bottom: 90px; } #prompt { bottom: 110px; } }
+  @media (max-width: 720px) { #minimap { width: 160px; height: 67px; } .hud { max-width: calc(100vw - 190px); } .chip b { font-size: 16px; }
+    #settings { top: 120px; } #mission { top: 120px; } }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="chip panel"><small>Dinero</small><b id="cash">$0</b></div>
+  <div class="chip panel"><small id="speedLabel">Velocidad</small><b id="speed">0</b> <small style="display:inline">km/h</small></div>
+  <div class="chip panel"><small>Estrellas</small><b id="stars">0/30</b></div>
+  <div class="chip panel"><small>Hora</small><b id="clock">17:00</b></div>
+</div>
+<div id="mission" class="panel"><div class="t">Misión</div><div class="m" id="mTitle">—</div><div class="s" id="mSub"></div></div>
+
+<div id="mapWrap" class="panel">
+  <canvas id="minimap" width="480" height="200"></canvas>
+  <div id="topBtns">
+    <button id="camBtn" title="C">📷 Cámara</button>
+    <button id="radioBtn" title="R">📻 Radio</button>
+    <button id="setBtn">⚙️</button>
+  </div>
+</div>
+
+<div id="settings" class="panel hidden">
+  <label>Hora del día <span id="todLabel"></span></label>
+  <input type="range" id="tod" min="0" max="1" step="0.001" value="0.45">
+  <label><input type="checkbox" id="todAuto"> Ciclo automático</label>
+  <label>Volumen</label>
+  <input type="range" id="vol" min="0" max="1" step="0.01" value="0.6">
+  <div class="row-btns">
+    <button id="photoBtn" title="P">📸 Foto</button>
+    <button id="skipBtn">⏭ Otra misión</button>
+    <button id="menuBtn" title="Esc">☰ Menú</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="achToast" class="panel"><span class="ico" id="achIco">🏆</span><div><small>LOGRO DESBLOQUEADO</small><b id="achName"></b></div></div>
+<div id="combo"></div>
+<div id="prompt" class="panel hidden"></div>
+<div id="offer" class="panel hidden"><span id="offerText"></span><button class="primary" id="offerBtn">📺 Ver anuncio <kbd>G</kbd></button><div class="bar" id="offerBar"></div></div>
+
+<div id="gpu" class="panel">
+  <h3>GPU HARNESS <button id="gpuToggle">–</button></h3>
+  <div class="body">
+    <div class="row"><span>GPU</span><span id="gRenderer">—</span></div>
+    <div class="row"><span>API</span><span id="gApi">—</span></div>
+    <div class="row"><span>FPS / frame</span><span id="gFps">—</span></div>
+    <div class="row"><span>GPU time</span><span id="gGpu">—</span></div>
+    <div class="row"><span>Draw calls</span><span id="gCalls">—</span></div>
+    <div class="row"><span>Triangles</span><span id="gTris">—</span></div>
+    <div class="row"><span>Render res</span><span id="gRes">—</span></div>
+    <canvas id="gGraph" width="320" height="38"></canvas>
+    <div class="row"><span>Calidad</span>
+      <select id="quality">
+        <option value="low">Low</option><option value="medium">Medium</option>
+        <option value="high" selected>High</option><option value="ultra">Ultra</option>
+      </select>
+    </div>
+    <div class="btns">
+      <button id="benchBtn" class="primary">Benchmark (30 s)</button>
+      <button id="dlBtn" disabled>JSON</button>
+    </div>
+  </div>
+</div>
+
+<div id="touch">
+  <div class="grp"><button data-k="ArrowLeft">◀</button><button data-k="ArrowRight">▶</button></div>
+  <div class="grp"><button data-k="KeyF">🚪</button><button data-k="Space">⤾</button><button data-k="ArrowDown">⏬</button><button data-k="ArrowUp">⏫</button></div>
+</div>
+
+<!-- Main / pause menu -->
+<div class="overlay" id="menu">
+  <div class="card panel">
+    <h1 id="menuTitle">Miami Beach<br>Drive</h1>
+    <p id="menuText">Atardecer en Ocean Drive. Maneja, bájate y camina por la playa, nada en el mar, pide prestado un auto, haz viajes de taxi, salta rampas y gasta tus ganancias en el garaje.</p>
+    <div class="vehicles" id="vehicles"></div>
+    <div class="swatches" id="swatches" style="justify-content:center"></div>
+    <div id="benchResult" hidden></div>
+    <div class="actions">
+      <button class="primary" id="playBtn">¡Vamos!</button>
+      <button id="menuBench">GPU benchmark</button>
+    </div>
+    <div id="achWrap" class="hidden"><h3>Logros <span id="achCount"></span></h3><div class="ach" id="achList"></div></div>
+    <p class="keys">
+      <b>En vehículo:</b> <kbd>W A S D</kbd>/<kbd>↑←↓→</kbd> conducir · <kbd>Espacio</kbd> derrape · <kbd>H</kbd> claxon · <kbd>F</kbd> bajarse<br>
+      <b>A pie:</b> <kbd>W A S D</kbd> caminar · <kbd>Shift</kbd> correr · <kbd>Espacio</kbd> saltar · <kbd>Q</kbd>/<kbd>E</kbd> o ratón girar cámara · <kbd>F</kbd> subir a un vehículo o abrir el garaje<br>
+      <kbd>C</kbd> cámara · <kbd>R</kbd> radio · <kbd>P</kbd> foto · <kbd>G</kbd> aceptar oferta · <kbd>Esc</kbd> pausa · gamepad compatible
+    </p>
+    <p style="font-size:11px"><button id="resetSave">Borrar progreso</button></p>
+  </div>
+</div>
+
+<!-- Garage shop -->
+<div class="overlay hidden" id="shop">
+  <div class="card panel">
+    <h2>🔧 Garaje Brisa</h2>
+    <div class="cashline" id="shopCash">$0</div>
+    <h3>Vehículos</h3><div class="vehicles" id="shopVeh"></div>
+    <h3>Pintura <small style="color:var(--muted);letter-spacing:0">($40 cada color, se usa en todos tus vehículos)</small></h3><div class="swatches" id="shopColors"></div>
+    <h3>Extras</h3><div id="shopExtras"></div>
+    <div class="actions"><button class="primary" id="shopClose">Listo <kbd>Esc</kbd></button></div>
+  </div>
+</div>
+
+<!-- Simulated ad (replaced by the portal SDK when present) -->
+<div class="overlay hidden" id="adOverlay">
+  <div class="card panel">
+    <h2>Anuncio</h2>
+    <p>Anuncio simulado. Al publicar el juego en CrazyGames o Poki, aquí aparece el anuncio con recompensa del portal.</p>
+    <div id="adCount">3</div>
+  </div>
+</div>
+
+<script type="module">/*__BUNDLE__*/</script>
+</body>
+</html>
