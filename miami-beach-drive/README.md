@@ -2,6 +2,13 @@
 
 Juego 3D de mundo abierto en el navegador (WebGL 2 / Three.js, todo en la GPU) ambientado en Miami Beach: Ocean Drive, Collins Avenue, edificios Art Deco pastel con neón, palmeras, playa, muelle y un océano animado.
 
+**Gráficos:**
+- **Iluminación:** basada en imágenes del cielo (reflejos reales en autos y ventanas) y oclusión ambiental (GTAO).
+- **Modelos:** autos esculpidos con pintura con capa de barniz y personas con cuerpos suaves.
+- **Ambiente:** palmeras con hojas detalladas, nubes, calles mojadas de noche y corrección de color cinematográfica.
+
+Para conseguir realismo fotográfico hacen falta modelos 3D profesionales: mira la sección "Siguiente nivel gráfico" en `PUBLICAR.md`.
+
 ## Jugar
 Abre `index.html` en Chrome, Edge o Firefox. Es **un solo archivo autocontenido**: funciona sin internet y se puede subir tal cual a un portal de juegos.
 
@@ -24,7 +31,7 @@ Otras teclas: **C** cámara (persecución, cinemática, primera persona, aérea)
 - **Pedir prestado cualquier auto del tráfico:** el conductor se baja molesto.
 - **Misiones de taxi:** recoger pasajeros (te saludan con la mano) y llevarlos a su destino. Los saltos con pasajero dan propina.
 - **Peatones:** caminan por las aceras y la playa y se apartan de tu camino. Si atropellas a uno, se cae, se levanta enojado y pagas una multa.
-- **Garaje Brisa (G en el mapa):** comprar vehículos (Scooter, Jeep, moto acuática), pinturas y luces de neón bajo el vehículo, todo con dinero del juego.
+- **Garaje Brisa (G en el mapa):** comprar vehículos (Scooter $15, Jeep $30, moto acuática $50), pinturas ($4) y luces de neón bajo el vehículo ($12), todo con dinero del juego.
 - **Moto acuática:** sale del muelle y permite explorar el mar, donde hay estrellas que solo se alcanzan por agua.
 - **12 logros**, rampas, derrapes, 30 estrellas, pelotas de playa que puedes patear y ciclo de día y noche.
 - **Guardado automático:** dinero, vehículos, colores y logros se guardan en el navegador.
