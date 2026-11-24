@@ -1,0 +1,10 @@
+{
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "colorGroups": [
+    { "query": "tag:#mapa", "color": { "a": 1, "rgb": 14701138 } },
+    { "query": "tag:#tema", "color": { "a": 1, "rgb": 5431378 } },
+    { "query": "tag:#proyecto", "color": { "a": 1, "rgb": 3381759 } }
+  ]
+}
